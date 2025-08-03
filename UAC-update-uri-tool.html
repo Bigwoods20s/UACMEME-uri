@@ -1,0 +1,99 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Update Token Metadata – UAC</title>
+  <script src="https://unpkg.com/@solana/web3.js@1.73.2/lib/index.iife.js"></script>
+  <script src="https://unpkg.com/@metaplex-foundation/mpl-token-metadata"></script>
+  <style>
+    body { font-family: sans-serif; background-color: #0e0e0e; color: #fff; text-align: center; padding: 2rem; }
+    input, button { padding: 10px; margin: 10px 0; width: 90%; max-width: 400px; }
+    input { border: none; border-radius: 4px; }
+    button { background-color: #14f195; border: none; border-radius: 4px; cursor: pointer; }
+    .container { max-width: 500px; margin: auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🛠 Update Token Metadata URI</h1>
+    <p>Connect Phantom → Input Token Mint → New Metadata URI → Update!</p>
+
+    <button onclick="connectWallet()">🔌 Connect Wallet</button>
+    <p id="wallet-address">Wallet not connected</p>
+
+    <input type="text" id="mint" placeholder="Token Mint Address (e.g., HxRex...)" />
+    <input type="text" id="uri" placeholder="New Metadata URI (https://...json)" />
+    <button onclick="updateMetadata()">🚀 Update URI</button>
+
+    <p id="status"></p>
+  </div>
+
+  <script type="module">
+    import { Connection, clusterApiUrl, PublicKey, Transaction } from "https://unpkg.com/@solana/web3.js@1.73.2/lib/index.browser.mjs";
+    import { createUpdateMetadataAccountV2Instruction, findMetadataPda, PROGRAM_ID as TOKEN_METADATA_PROGRAM_ID } from "https://unpkg.com/@metaplex-foundation/mpl-token-metadata/dist/index.browser.mjs";
+
+    let wallet;
+
+    async function connectWallet() {
+      try {
+        const resp = await window.solana.connect();
+        wallet = resp.publicKey;
+        document.getElementById("wallet-address").innerText = `✅ Connected: ${wallet.toString()}`;
+      } catch (err) {
+        console.error(err);
+        alert("Failed to connect wallet.");
+      }
+    }
+
+    async function updateMetadata() {
+      const mint = document.getElementById("mint").value.trim();
+      const uri = document.getElementById("uri").value.trim();
+      const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
+
+      if (!wallet || !mint || !uri) {
+        alert("Fill in all fields and connect your wallet.");
+        return;
+      }
+
+      const mintPubkey = new PublicKey(mint);
+      const metadataPDA = findMetadataPda(mintPubkey);
+      const ix = createUpdateMetadataAccountV2Instruction({
+        metadata: metadataPDA[0],
+        updateAuthority: wallet,
+      }, {
+        updateMetadataAccountArgsV2: {
+          data: {
+            name: "The Ultimate Alt Coin",
+            symbol: "UAC",
+            uri: uri,
+            sellerFeeBasisPoints: 0,
+            creators: null,
+          },
+          updateAuthority: wallet,
+          primarySaleHappened: null,
+          isMutable: true
+        }
+      });
+
+      const tx = new Transaction().add(ix);
+      try {
+        const { blockhash } = await connection.getLatestBlockhash();
+        tx.recentBlockhash = blockhash;
+        tx.feePayer = wallet;
+
+        const signed = await window.solana.signTransaction(tx);
+        const sig = await connection.sendRawTransaction(signed.serialize());
+        document.getElementById("status").innerText = `✅ Tx sent: ${sig}`;
+      } catch (e) {
+        console.error(e);
+        document.getElementById("status").innerText = "❌ Failed to send transaction.";
+      }
+    }
+
+    window.connectWallet = connectWallet;
+    window.updateMetadata = updateMetadata;
+  </script>
+</body>
+</html>
